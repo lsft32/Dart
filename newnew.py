@@ -101,7 +101,7 @@ profit = profit[['corp_code','thstrm_nm','thstrm_amount','frmtrm_nm', \
 profit.columns = ['corp_code','2023년','2023_당기순이익','2022년','2022_당기순이익', \
                   '2021년','2021_당기순이익','currency']
 
-# 전체 결과 저장
+# 전체 결과 저장wkdwkd
 result_stocks = []
 
 async def fetch_stock_data(session, url, params, retries=3):
