@@ -1,163 +1,197 @@
-import aiohttp
+import io
+import zipfile
 import asyncio
+import aiohttp
 import pandas as pd
-import requests_cache
-import FinanceDataReader as fdr
+import time
 import datetime
+import random
 
-# 캐시 설정
-requests_cache.install_cache('dart_cache', expire_after=1800)
-
-# API key 설정
+# API 키
 crtfc_keys = [
-    'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b', 
+    'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b',
     'e5d7ed4120cc74ac5df3dbaa79e5f16edc09f80a',
     '15e5d18d0dc5e61c4c942b6833f1d45160a0badc'
 ]
 
 # 회사 리스트 불러오기
-corp_list = pd.read_csv('C:/CloudJYK/회사상세정보.csv')
+corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
 
-# 회사 리스트를 3개로 분할
-chunks = [
-    corp_list.iloc[:1259],
-    corp_list.iloc[1259:2518],
-    corp_list.iloc[2518:]
-]
+# 세마포어를 설정하여 동시 연결 수를 제한합니다.
+semaphore = asyncio.Semaphore(10)  # 동시 요청 수를 10개로 제한
 
-# 현재 시간 구하기
-now = datetime.datetime.now()
-market_close_time = datetime.datetime(now.year, now.month, now.day, 15, 30)
+async def fetch_financial_data(session, url, params, retries=3):
+    async with semaphore:  # 세마포어 사용
+        for attempt in range(retries):
+            try:
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        print(f"Failed with status {response.status}. Retrying...")
+            except aiohttp.ClientDisconnectedError:
+                print("Server disconnected. Retrying...")
+                await asyncio.sleep(random.uniform(1, 3))  # 재시도 전에 지연 시간 추가
+        return None  # 여러 번 시도해도 실패한 경우 None 반환
 
-# 장이 종료되기 전이면 어제 날짜로 설정
-if now < market_close_time:
-    today = (now - datetime.timedelta(days=1)).strftime('%Y%m%d')
-else:
-    today = now.strftime('%Y%m%d')
+# 각 API 키로 수집할 회사 범위 설정
+chunks = [corp_list.iloc[1:1260], corp_list.iloc[1260:2520], corp_list.iloc[2520:]]
+result_all = pd.DataFrame()
 
-# 동시 요청 수 제한 (최대 10개의 요청을 동시에 처리)
-semaphore = asyncio.Semaphore(10)
-
-# 비동기 요청 함수
-async def fetch_financial_data(session: aiohttp.ClientSession, crtfc_key: str, corp_code: str, bsns_year: str, report_code: str, fs_div: str):
+async def gather_data(corp_chunk, crtfc_key):
     url = 'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json'
-    params = {
-        'crtfc_key': crtfc_key,
-        'corp_code': corp_code,
-        'bsns_year': bsns_year,
-        'reprt_code': report_code,
-        'fs_div': fs_div
-    }
-    await asyncio.sleep(0.4)
-    async with semaphore:
-        try:
-            async with session.get(url, params=params) as response:
-                return await response.json()
-        except aiohttp.ClientConnectorError:
-            print(f"Error connecting to {url}. Retrying...")
-            return None
+    bsns_year = '2023'
+    report_code = '11011' # 사업보고서 코드
+    fs_div = 'CFS'
+    
+    results = []
+    timeout = aiohttp.ClientTimeout(total=10)  # 10초 타임아웃 설정
+    async with aiohttp.ClientSession(timeout=timeout) as session:
 
-async def fetch_stock_data(session: aiohttp.ClientSession, crtfc_key: str, corp_code: str, bsns_year: str, report_code: str):
+        tasks = []
+        for _, r in corp_chunk.iterrows():
+            corp_code = str(r['corp_code']).zfill(8)
+            params = {
+                'crtfc_key': crtfc_key,
+                'corp_code': corp_code,
+                'bsns_year': bsns_year,
+                'reprt_code': report_code,
+                'fs_div': fs_div,
+            }
+            
+            task = fetch_financial_data(session, url, params)
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)
+        
+        # 응답 처리
+        for result in responses:
+            await asyncio.sleep(0.4)
+            if result['status'] == '000':
+                result_df = pd.DataFrame(result['list'])
+                results.append(result_df)
+    
+    return pd.concat(results, ignore_index=True) if results else pd.DataFrame()
+
+async def main():
+    global result_all
+    tasks = [gather_data(chunk, crtfc_key) for chunk, crtfc_key in zip(chunks, crtfc_keys)]
+    results = await asyncio.gather(*tasks)
+    result_all = pd.concat(results, ignore_index=True)
+
+# 비동기 이벤트 루프 실행
+asyncio.run(main())
+
+# 필요한 데이터 추출
+profit = result_all.loc[(result_all['account_id'] == 'ifrs-full_ProfitLossAttributableToOwnersOfParent')]
+profit = profit[['corp_code','thstrm_nm','thstrm_amount','frmtrm_nm', \
+                 'frmtrm_amount','bfefrmtrm_nm','bfefrmtrm_amount','currency']]
+profit.columns = ['corp_code','2023년','2023_당기순이익','2022년','2022_당기순이익', \
+                  '2021년','2021_당기순이익','currency']
+
+# 이후의 코드도 profit 데이터프레임을 활용해 계속 진행
+
+import matplotlib.pyplot as plt
+import FinanceDataReader as fdr
+import datetime
+
+# 비동기 수집 후의 데이터 처리
+profit = result_all.loc[(result_all['account_id'] == 'ifrs-full_ProfitLossAttributableToOwnersOfParent')]
+profit = profit[['corp_code','thstrm_nm','thstrm_amount','frmtrm_nm', \
+                 'frmtrm_amount','bfefrmtrm_nm','bfefrmtrm_amount','currency']]
+profit.columns = ['corp_code','2023년','2023_당기순이익','2022년','2022_당기순이익', \
+                  '2021년','2021_당기순이익','currency']
+
+# 전체 결과 저장
+result_stocks = []
+
+async def fetch_stock_data(session, url, params, retries=3):
+    async with semaphore:  # 세마포어 사용
+        for attempt in range(retries):
+            try:
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        print(f"Failed with status {response.status}. Retrying...")
+            except aiohttp.ClientDisconnectedError:
+                print("Server disconnected. Retrying...")
+                await asyncio.sleep(random.uniform(1, 3))  # 재시도 전에 지연 시간 추가
+        return None  # 여러 번 시도해도 실패한 경우 None 반환
+
+async def gather_stock_data(corp_chunk, crtfc_key):
     url = 'https://opendart.fss.or.kr/api/stockTotqySttus.json'
-    params = {
-        'crtfc_key': crtfc_key,
-        'corp_code': corp_code,
-        'bsns_year': bsns_year,
-        'reprt_code': report_code
-    }
-    await asyncio.sleep(0.4)
-    async with semaphore:
-        try:
-            async with session.get(url, params=params) as response:
-                return await response.json()
-        except aiohttp.ClientConnectorError:
-            print(f"Error connecting to {url}. Retrying...")
-            return None
-
-# 데이터 수집 함수
-async def collect_data(corp_list_chunk, crtfc_key, bsns_year='2023', report_code='11011', fs_div='CFS'):
-    result_all = pd.DataFrame()
-    stock_result_all = pd.DataFrame()
+    bsns_year = '2023'
+    reprt_code = '11011'
+    results = []
 
     async with aiohttp.ClientSession() as session:
-        financial_tasks = []
-        stock_tasks = []
-        
-        for _, r in corp_list_chunk.iterrows():
+        tasks = []
+        for _, r in corp_chunk.iterrows():
             corp_code = str(r['corp_code']).zfill(8)
-            
-            financial_task = fetch_financial_data(session, crtfc_key, corp_code, bsns_year, report_code, fs_div)
-            stock_task = fetch_stock_data(session, crtfc_key, corp_code, bsns_year, report_code)
-            
-            financial_tasks.append(financial_task)
-            stock_tasks.append(stock_task)
+            corp_name = r['corp_name']
+            stock_code = str(r['stock_code']).zfill(6)
+            params = {
+                'crtfc_key': crtfc_key,
+                'corp_code': corp_code,
+                'bsns_year': str(bsns_year),
+                'reprt_code': reprt_code,
+            }
+            task = fetch_stock_data(session, url, params)
+            tasks.append(task)
+
+        responses = await asyncio.gather(*tasks)
         
-        # 재무 데이터 수집
-        financial_responses = await asyncio.gather(*financial_tasks)
-        for response in financial_responses:
-            if response['status'] == '000':
-                result_df = pd.DataFrame(response['list'])
-                result_all = pd.concat([result_all, result_df])
+        for result, r in zip(responses, corp_chunk.iterrows()):
+            await asyncio.sleep(0.4)
+            if result['status'] == '000':
+                for item in result['list']:
+                    if item['se'] in ['보통주', '우선주', '합계']:
+                        result_dic = {
+                            'se': item['se'],
+                            'istc_totqy': int(item['istc_totqy'].replace(',', '')),
+                            'corp_code': r[1]['corp_code'],
+                            'corp_name': r[1]['corp_name'],
+                            'stock_code': stock_code
+                        }
+                        results.append(result_dic)
 
-        # 주식 데이터 수집
-        stock_responses = await asyncio.gather(*stock_tasks)
-        stock_result_list = []
-        for response in stock_responses:
-            if response['status'] == '000':
-                for stock_item in response['list']:
-                    if stock_item['se'] == '보통주':
-                        stock_result_list.append({
-                            'corp_code': response['list'][0]['corp_code'],
-                            'istc_totqy': stock_item['istc_totqy']
-                        })
-        stock_result_all = pd.DataFrame(stock_result_list)
+    return pd.DataFrame(results)
 
-    return result_all, stock_result_all
-
-# 병렬 실행
-async def main():
-    tasks = [
-        collect_data(chunks[0], crtfc_keys[0]),
-        collect_data(chunks[1], crtfc_keys[1]),
-        collect_data(chunks[2], crtfc_keys[2])
-    ]
-
+async def main_stock_data():
+    global result_stocks
+    tasks = [gather_stock_data(chunk, crtfc_key) for chunk, crtfc_key in zip(chunks, crtfc_keys)]
     results = await asyncio.gather(*tasks)
+    result_stocks = pd.concat(results, ignore_index=True)
 
-    # 재무 데이터와 주식 데이터 병합
-    financial_result = pd.concat([res[0] for res in results])
-    stock_result = pd.concat([res[1] for res in results])
+asyncio.run(main_stock_data())
 
-    # 당기순이익 필터링
-    profit = financial_result.loc[financial_result['account_id'] == 'ifrs-full_ProfitLossAttributableToOwnersOfParent']
-    profit = profit[['corp_code', 'thstrm_amount']]
-    profit.columns = ['corp_code', '2023_당기순이익']
-    profit = profit[profit['2023_당기순이익'] != '']
+# Merge stock data with financial data
+stocks = pd.DataFrame(result_stocks)
+df = pd.merge(left=profit, right=stocks, how='left', on='corp_code')
+df1 = df.loc[(df['se'] == '보통주') & (df['currency'] == 'KRW')]
+df1['stock_code'] = df1['stock_code'].str.zfill(6)
 
-    # 주식 총수 데이터 병합
-    stock_result['istc_totqy'] = stock_result['istc_totqy'].str.replace(',', '').astype('int64')
-    merged_df = pd.merge(profit, stock_result, how='left', on='corp_code')
+# 현재 날짜 계산 (주가 정보를 불러오기 위해)
+now = datetime.datetime.now()
+market_close_time = datetime.datetime(now.year, now.month, now.day, 15, 30)
+today = (now - datetime.timedelta(days=1)).strftime('%Y%m%d') if now < market_close_time else now.strftime('%Y%m%d')
 
-    # 주가 데이터 수집
-    price_all = pd.DataFrame()
-    for i, r in merged_df.iterrows():
-        stock_code = str(r['corp_code']).zfill(6)
-        price = fdr.DataReader(stock_code, today, today)[['Close']]
-        price['corp_code'] = stock_code
-        price_all = pd.concat([price_all, price])
+price_all = pd.DataFrame()
+for _, r in df1.iterrows():
+    stock_code = r['stock_code']
+    price = fdr.DataReader(stock_code, today, today)[['Close']]
+    price['stock_code'] = stock_code
+    price_all = pd.concat([price_all, price])
 
-    # 최종 병합
-    final_df = pd.merge(merged_df, price_all, how='left', on='corp_code')
+df2 = pd.merge(left=df1, right=price_all, how='left', on='stock_code')
 
-    # PER 계산
-    final_df['2023_당기순이익'] = final_df['2023_당기순이익'].astype('int64')
-    final_df['PER'] = final_df['Close'] * final_df['istc_totqy'] / final_df['2023_당기순이익']
+# PER 계산
+df2['PER'] = df2['Close'] * df2['istc_totqy'] / df2['2021_당기순이익']
+df2 = df2.loc[df2['2023_당기순이익'] != '', ]
+df2 = df2.astype({'2023_당기순이익': 'int64'})
 
-    # 상위 20개 기업 저장
-    final_result = final_df.loc[final_df['PER'] > 0].sort_values('PER').head(20)
-    print(final_result)
+# 상위 20개 PER 결과
+finalresult = df2[df2['PER'] > 0].sort_values('PER').iloc[:20][['corp_name', 'PER', 'Close']]
+finalresult.to_csv('C:/WTF/PER_TOP20.csv', index=False, encoding="utf-8-sig")
 
-    final_result.to_csv('C:/CloudJYK/PER_TOP20.csv', index=False, encoding="utf-8-sig")
-
-# 비동기 루프 실행
-asyncio.run(main())
+print("Top 20 PER 기업 데이터를 'PER_TOP20.csv' 파일에 저장 완료")

@@ -7,9 +7,9 @@ import pandas as pd
 import time
 import datetime
 
-crtfc_key = 'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b'
+crtfc_key = '15e5d18d0dc5e61c4c942b6833f1d45160a0badc'
 
-path = 'C:/CloudJYK'
+path = 'C:/WTF'
 filename = '/corpcode.zip'
 
 url = 'https://opendart.fss.or.kr/api/corpCode.xml'
@@ -68,34 +68,36 @@ corp_df = corps_df.loc[corps_df['stock_code'] !='',:].reset_index(drop=True)
 
 result_all = []
 corp_detail = pd.DataFrame()
-corp_df.to_csv('C:/CloudJYK/corp_detail.csv', index = False, encoding="utf-8-sig")
+corp_df.to_csv('C:/WTF/corp_detail.csv', index = False, encoding="utf-8-sig")
 print('총 회사 수는 : ' + str(corps_df.shape[0]))
 
 for i, r in corps_df.iterrows():
-    #if i == 2:
-    #break
-
-    #없으면 어느 시점에서 에러발생
-    time.sleep(0.05)
-
-    #print('i = ' + str(i))
     corp_code = str(r['corp_code'])
     corp_name = r['corp_name']
 
     url = 'https://opendart.fss.or.kr/api/company.json'
     params = {
-        'crtfc_key' : crtfc_key, 
-        'corp_code' : corp_code,
+        'crtfc_key': crtfc_key,
+        'corp_code': corp_code,
     }
 
-    results = requests.get(url, params=params).json()
+    while True:
+        try:
+            time.sleep(0.4)  # 각 요청 간의 지연
+            results = requests.get(url, params=params).json()
 
-    if results['status'] == '000':
-        result_all.append(results)
+            if results['status'] == '000':
+                result_all.append(results)
+                break  # 성공적으로 데이터를 받으면 while 루프를 종료
 
+        except requests.exceptions.RequestException as e:
+            print(f"Error for corp_code {corp_code}: {e}")
+            time.sleep(1)  # 예외 발생 시 1초 대기 후 다시 시도
+
+# 모든 데이터프레임 결과를 수집
 corp_detail = pd.DataFrame(result_all)
 
-corp_detail.to_csv('C:/CloudJYK/회사상세정보.csv', index = False, encoding="utf-8-sig")
+corp_detail.to_csv('C:/WTF/회사상세정보.csv', index = False, encoding="utf-8-sig")
 
 ##---------------------------------------------###
 
