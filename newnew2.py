@@ -9,10 +9,10 @@ import datetime
 import requests_cache
 
 # requests_cache로 네트워크 호출 캐시 적용
-requests_cache.install_cache('dart_cache', expire_after=3600)  # 30분 캐시 유지
+requests_cache.install_cache('dart_cache_2', expire_after=1800)  # 30분 캐시 유지
 
 corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
-corp_list = corp_list.iloc[:1260]
+corp_list = corp_list.iloc[1260:2520]
 
 # 회사별 전체재무제표 확인
 result_all = pd.DataFrame()
@@ -20,27 +20,30 @@ result_all = pd.DataFrame()
 print((corp_list.shape[0]))
 
 
-crtfc_key = 'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b'
+crtfc_key = 'e5d7ed4120cc74ac5df3dbaa79e5f16edc09f80a'
 bsns_year = '2023'
 report_code = '11011' #1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011
 fs_div = 'CFS'
 
 for i, r in corp_list.iterrows():
-    # 전체재무제표 요청인자
+    #전체재무제표 요청인자
     crtfc_key = crtfc_key
     corp_code = str(r['corp_code']).zfill(8)
-    time.sleep(0.5)  # 기본 대기 시간
+
+    time.sleep(0.5)
+
+    #print(i)
 
     url = 'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json'
     params = {
         'crtfc_key': crtfc_key,
-        'corp_code': corp_code,
-        'bsns_year': bsns_year,
-        'reprt_code': report_code,
-        'fs_div': fs_div,
+        'corp_code' : corp_code,
+        'bsns_year' : bsns_year,
+        'reprt_code' : report_code,
+        'fs_div' : fs_div,
     }
     
-    # 요청을 성공할 때까지 재시도하는 루프
+# 요청을 성공할 때까지 재시도하는 루프
     while True:
         try:
             result = requests.get(url, params=params).json()
@@ -75,7 +78,7 @@ for i, r in corp_list.iterrows():
     #    break
     
     #없으면 어느 시점에서 에러발생
-    time.sleep(0.5)
+    time.sleep(0.4)
     
     #print('i = ' + str(i))
     corp_code=str(r['corp_code']).zfill(8)
@@ -111,7 +114,7 @@ for i, r in corp_list.iterrows():
             break
         except (requests.exceptions.RequestException, KeyError) as e:
             print(f"Request failed at index {i} with error: {e}. Retrying in 2 seconds...")
-            time.sleep(2)
+            time.sleep(2)    
 
 stocks=pd.DataFrame(result_stocks)
 stocks
@@ -127,47 +130,36 @@ import datetime
 
 plt.rc('font', family='NanumGothic') 
 
-# 현재 시간 구하기
+#현재 시간 구하기
 now = datetime.datetime.now()
 
 # 장 종료 시간을 15:30으로 설정 (한국 주식 시장 기준)
 market_close_time = datetime.datetime(now.year, now.month, now.day, 15, 30)
 
-# 만약 장이 종료되기 전이라면, 어제 날짜로 설정
-if now < market_close_time:
+# 오늘 날짜가 토요일이나 일요일이면 가장 최근 금요일로 설정
+if now.weekday() == 5:  # 토요일인 경우
     today = (now - datetime.timedelta(days=1)).strftime('%Y%m%d')
+elif now.weekday() == 6:  # 일요일인 경우
+    today = (now - datetime.timedelta(days=2)).strftime('%Y%m%d')
 else:
-    # 장이 종료된 이후라면 오늘 날짜로 설정
-    today = now.strftime('%Y%m%d')
+    # 평일인 경우, 장 종료 전이라면 어제 날짜로 설정
+    if now < market_close_time:
+        today = (now - datetime.timedelta(days=1)).strftime('%Y%m%d')
+    else:
+        # 장이 종료된 이후라면 오늘 날짜로 설정
+        today = now.strftime('%Y%m%d')
 
-# price_all=pd.DataFrame()
-# for i, r in df1.iterrows():
-#     stock_code = r['stock_code']
-    
-    
-#     #주가정보
-#     code=stock_code
-#     today=today
-#     price=fdr.DataReader(code,today,today)[['Close']]
-#     price['stock_code']=stock_code
-#     price_all = pd.concat([price_all,price])
-
-price_all = pd.DataFrame()
+price_all=pd.DataFrame()
 for i, r in df1.iterrows():
     stock_code = r['stock_code']
     
-    # 주가정보 가져오기
-    code = stock_code
     
-    try:
-        price = fdr.DataReader(code, today, today)[['Close']]
-    except KeyError:
-        print(f"No data for stock code: {code}")
-        continue  # 데이터가 없으면 다음 루프로 넘어감
-    
-    # 주가 데이터와 종목 코드 결합
-    price['stock_code'] = stock_code
-    price_all = pd.concat([price_all, price])
+    #주가정보
+    code=stock_code
+    today=today
+    price=fdr.DataReader(code,today,today)[['Close']]
+    price['stock_code']=stock_code
+    price_all = pd.concat([price_all,price])
 
 df2=pd.merge(left=df1,right=price_all,how='left',on='stock_code')
 df2
@@ -179,6 +171,6 @@ df2['2023_당기순이익'] = pd.to_numeric(df2['2023_당기순이익'], errors=
 df2['PER'] = df2['Close'] * df2['istc_totqy'] / df2['2023_당기순이익']
 df2
 
-finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']])
+finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']].iloc[:20,])
 
-finalresult.to_csv('C:/WTF/PER_TOP20_intermediate.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
+finalresult.to_csv('C:/WTF/PER_TOP20_intermediate_2.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
