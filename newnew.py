@@ -130,81 +130,7 @@ import datetime
 
 plt.rc('font', family='NanumGothic') 
 
-<<<<<<< HEAD
-# 전체 결과 저장wkdwkd
-result_stocks = []
-
-async def fetch_stock_data(session, url, params, retries=3):
-    async with semaphore:  # 세마포어 사용
-        for attempt in range(retries):
-            try:
-                async with session.get(url, params=params) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    else:
-                        print(f"Failed with status {response.status}. Retrying...")
-            except aiohttp.ClientDisconnectedError:
-                print("Server disconnected. Retrying...")
-                await asyncio.sleep(random.uniform(1, 3))  # 재시도 전에 지연 시간 추가
-        return None  # 여러 번 시도해도 실패한 경우 None 반환
-
-async def gather_stock_data(corp_chunk, crtfc_key):
-    url = 'https://opendart.fss.or.kr/api/stockTotqySttus.json'
-    bsns_year = '2023'
-    reprt_code = '11011'
-    results = []
-
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for _, r in corp_chunk.iterrows():
-            corp_code = str(r['corp_code']).zfill(8)
-            corp_name = r['corp_name']
-            stock_code = str(r['stock_code']).zfill(6)
-            params = {
-                'crtfc_key': crtfc_key,
-                'corp_code': corp_code,
-                'bsns_year': str(bsns_year),
-                'reprt_code': reprt_code,
-            }
-            task = fetch_stock_data(session, url, params)
-            tasks.append(task)
-
-        responses = await asyncio.gather(*tasks)
-        
-        for result, r in zip(responses, corp_chunk.iterrows()):
-            await asyncio.sleep(0.4)
-            if result['status'] == '000':
-                for item in result['list']:
-                    if item['se'] in ['보통주', '우선주', '합계']:
-                        result_dic = {
-                            'se': item['se'],
-                            'istc_totqy': int(item['istc_totqy'].replace(',', '')),
-                            'corp_code': r[1]['corp_code'],
-                            'corp_name': r[1]['corp_name'],
-                            'stock_code': stock_code
-                        }
-                        results.append(result_dic)
-
-    return pd.DataFrame(results)
-
-async def main_stock_data():
-    global result_stocks
-    tasks = [gather_stock_data(chunk, crtfc_key) for chunk, crtfc_key in zip(chunks, crtfc_keys)]
-    results = await asyncio.gather(*tasks)
-    result_stocks = pd.concat(results, ignore_index=True)
-
-asyncio.run(main_stock_data())
-
-# Merge stock data with financial data
-stocks = pd.DataFrame(result_stocks)
-df = pd.merge(left=profit, right=stocks, how='left', on='corp_code')
-df1 = df.loc[(df['se'] == '보통주') & (df['currency'] == 'KRW')]
-df1['stock_code'] = df1['stock_code'].str.zfill(6)
-
-# 현재 날짜 계산 (주가 정보를 불러오기 위해)
-=======
 # 현재 시간 구하기
->>>>>>> 9d346f9593a11587191745a44847404836d64fc6
 now = datetime.datetime.now()
 
 # 장 종료 시간을 15:30으로 설정 (한국 주식 시장 기준)
@@ -241,4 +167,3 @@ df2
 finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']].iloc[:20,])
 
 finalresult.to_csv('C:/CloudJYK/PER_TOP20.csv', index = False, encoding="utf-8-sig")
-
