@@ -179,6 +179,6 @@ df2['2023_당기순이익'] = pd.to_numeric(df2['2023_당기순이익'], errors=
 df2['PER'] = df2['Close'] * df2['istc_totqy'] / df2['2023_당기순이익']
 df2
 
-finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']])
+finalresult = pd.DataFrame(df2.loc[df2['PER'] > 0].sort_values('PER')[['corp_code', 'corp_name', 'PER', 'Close']])
 
-finalresult.to_csv('C:/WTF/PER_TOP20_intermediate.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
+finalresult.to_csv('C:/WTF/PER.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")

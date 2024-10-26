@@ -9,7 +9,7 @@ import datetime
 import requests_cache
 
 # requests_cache로 네트워크 호출 캐시 적용
-requests_cache.install_cache('dart_cache_2', expire_after=1800)  # 30분 캐시 유지
+requests_cache.install_cache('dart_cache_2', expire_after=3600)  # 60분 캐시 유지
 
 corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
 corp_list = corp_list.iloc[1260:2520]
@@ -63,7 +63,7 @@ profit.columns = ['corp_code','2023년','2023_당기순이익','2022년','2022_�
                   '2021년','2021_당기순이익','currency']
 
 profit
-#profit.to_csv('C:/CloudJYK/PER_list.csv', index = False, encoding="utf-8-sig")
+profit.to_csv('C:/WTF/당기순이익_list(1260-2519).csv', index = False, encoding="utf-8-sig")
 
 #######################################################################################
 
@@ -156,8 +156,11 @@ for i, r in df1.iterrows():
     
     #주가정보
     code=stock_code
-    today=today
-    price=fdr.DataReader(code,today,today)[['Close']]
+    try:
+        price = fdr.DataReader(code, today, today)[['Close']]
+    except KeyError:
+        print(f"No data for stock code: {code}")
+        continue  # 데이터가 없으면 다음 루프로 넘어감
     price['stock_code']=stock_code
     price_all = pd.concat([price_all,price])
 
@@ -171,6 +174,6 @@ df2['2023_당기순이익'] = pd.to_numeric(df2['2023_당기순이익'], errors=
 df2['PER'] = df2['Close'] * df2['istc_totqy'] / df2['2023_당기순이익']
 df2
 
-finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']].iloc[:20,])
+finalresult = pd.DataFrame(df2.loc[df2['PER'] > 0].sort_values('PER')[['corp_code', 'corp_name', 'PER', 'Close']])
 
-finalresult.to_csv('C:/WTF/PER_TOP20_intermediate_2.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
+finalresult.to_csv('C:/WTF/PER.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")

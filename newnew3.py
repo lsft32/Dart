@@ -9,7 +9,7 @@ import datetime
 import requests_cache
 
 # requests_cache로 네트워크 호출 캐시 적용
-requests_cache.install_cache('dart_cache_3', expire_after=1800)  # 30분 캐시 유지
+requests_cache.install_cache('dart_cache_3', expire_after=3600)  # 60분 캐시 유지
 
 corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
 corp_list = corp_list.iloc[2520:]
@@ -156,8 +156,11 @@ for i, r in df1.iterrows():
     
     #주가정보
     code=stock_code
-    today=today
-    price=fdr.DataReader(code,today,today)[['Close']]
+    try:
+        price = fdr.DataReader(code, today, today)[['Close']]
+    except KeyError:
+        print(f"No data for stock code: {code}")
+        continue  # 데이터가 없으면 다음 루프로 넘어감
     price['stock_code']=stock_code
     price_all = pd.concat([price_all,price])
 
@@ -171,6 +174,27 @@ df2['2023_당기순이익'] = pd.to_numeric(df2['2023_당기순이익'], errors=
 df2['PER'] = df2['Close'] * df2['istc_totqy'] / df2['2023_당기순이익']
 df2
 
-finalresult = pd.DataFrame(df2.loc[df2['PER']>0].sort_values('PER')[['corp_name','PER','Close']].iloc[:20,])
+finalresult = pd.DataFrame(df2.loc[df2['PER'] > 0].sort_values('PER')[['corp_code', 'corp_name', 'PER', 'Close']])
 
-finalresult.to_csv('C:/WTF/PER_TOP20_intermediate_3.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
+finalresult.to_csv('C:/WTF/PER.csv', mode='a', header=not bool(i), index=False, encoding="utf-8-sig")
+
+# 1. CSV 파일을 불러오되, 첫 번째 행을 데이터로 사용
+df = pd.read_csv('C:/WTF/PER.csv', encoding="utf-8-sig")
+
+# 2. 열 이름을 수동으로 지정 (예: '종목명', 'PER', '주가')
+df.columns = ['corp_code','종목명', 'PER', '주가']
+
+# 3. PER 값을 기준으로 오름차순 정렬
+df_sorted = df.sort_values(by='PER')
+
+# 4. 중복된 행 제거 (종목명, PER, 주가가 동일한 행을 하나로 합침)
+df = df.drop_duplicates(subset=['corp_code','종목명', 'PER', '주가'])
+
+# 5. 순위를 나타내는 열 추가 (1부터 시작하는 순위)
+df_sorted['순위'] = df_sorted['PER'].rank(method='min').astype(int)
+
+# 6. 열 순서 지정 (순위, 종목명, PER, 주가 순으로)
+df_sorted = df_sorted[['순위','corp_code','종목명', 'PER', '주가']]
+
+# 7. 정렬된 데이터를 다시 CSV 파일로 저장
+df_sorted.to_csv('C:/WTF/PER.csv', index=False, encoding="utf-8-sig")
