@@ -12,24 +12,38 @@ import requests_cache
 requests_cache.install_cache('dart_cache', expire_after=3600)  # 30분 캐시 유지
 
 corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
-corp_list = corp_list.iloc[:1260]
+#corp_list = corp_list.iloc[:1260]
 
 # 회사별 전체재무제표 확인
 result_all = pd.DataFrame()
 
 print((corp_list.shape[0]))
 
+input_bsns = input('몇년도의 보고서를 가져올까요?' + '\n')
+input_reportcode = input('어떤 보고서를 가져올까요?' + '  예)1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011' + '\n')
+
+if input_reportcode == '11013':
+    report = '1분기 보고서'
+elif input_reportcode == '11012':
+    report = '반기보고서'
+elif input_reportcode == '11014':
+    report = '3분기 보고서'
+elif input_reportcode == '11011':
+    report = '사업보고서'
+
+
+print(input_bsns+'년도의 '+report+ '를 가져옵니다.')
 
 crtfc_key = 'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b'
-bsns_year = '2023'
-report_code = '11011' #1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011
+bsns_year = input_bsns
+report_code = input_reportcode #1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011
 fs_div = 'CFS'
 
 for i, r in corp_list.iterrows():
     # 전체재무제표 요청인자
     crtfc_key = crtfc_key
     corp_code = str(r['corp_code']).zfill(8)
-    time.sleep(0.5)  # 기본 대기 시간
+    time.sleep(0.3)  # 기본 대기 시간
 
     url = 'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json'
     params = {
@@ -75,14 +89,14 @@ for i, r in corp_list.iterrows():
     #    break
     
     #없으면 어느 시점에서 에러발생
-    time.sleep(0.5)
+    time.sleep(0.3)
     
     #print('i = ' + str(i))
     corp_code=str(r['corp_code']).zfill(8)
     corp_name=r['corp_name']
     stock_code=str(r['stock_code'])
-    bsns_year=2023
-    reprt_code='11011' 
+    bsns_year=input_bsns
+    reprt_code=input_reportcode 
     #1분기보고서 : 11013, 반기보고서 : 11012, 3분기보고서 : 11014, 사업보고서 : 11011
 
     #print(corp_code)

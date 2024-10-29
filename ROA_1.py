@@ -16,17 +16,31 @@ import datetime
 requests_cache.install_cache('dart_cache_2', expire_after=3600)  # 60분 캐시 유지
 
 corp_list = pd.read_csv('C:/WTF/회사상세정보.csv')
-corp_list = corp_list.iloc[:1260]
+# corp_list = corp_list.iloc[:1260]
 
 # 회사별 전체재무제표 확인
 result_all = pd.DataFrame()
 
 print((corp_list.shape[0]))
 
+input_bsns = input('몇년도의 보고서를 가져올까요?' + '\n')
+input_reportcode = input('어떤 보고서를 가져올까요?' + '  예)1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011' + '\n')
+
+if input_reportcode == '11013':
+    report = '1분기 보고서'
+elif input_reportcode == '11012':
+    report = '반기보고서'
+elif input_reportcode == '11014':
+    report = '3분기 보고서'
+elif input_reportcode == '11011':
+    report = '사업보고서'
+
+
+print(input_bsns+'년도의 '+report+ '를 가져옵니다.')
 
 crtfc_key = 'fee1dd02086668bbca7e8b91f0fc7a6b15b0d52b'
-bsns_year = '2023'
-report_code = '11011' #1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011
+bsns_year = input_bsns
+report_code = input_reportcode #1분기보고서: 11013 반기보고서: 11012 3분기보고서: 11014 사업보고서: 11011
 fs_div = 'CFS'
 
 for i, r in corp_list.iterrows():
@@ -34,7 +48,7 @@ for i, r in corp_list.iterrows():
     crtfc_key = crtfc_key
     corp_code = str(r['corp_code']).zfill(8)
 
-    time.sleep(0.5)
+    time.sleep(0.2)
 
     #print(i)
 
