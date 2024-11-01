@@ -110,4 +110,6 @@ ROA_result = pd.DataFrame(firstep.sort_values('ROA', ascending=False)[['corp_cod
 # 첫 번째 루프에서는 헤더를 추가, 이후는 헤더 없이 데이터 추가
 header = i == 0
 ROA_result.to_csv('C:/WTF/ROA.csv', mode='a', header=header, index=False, encoding="utf-8-sig")
+print('ROA 완료')
+
 

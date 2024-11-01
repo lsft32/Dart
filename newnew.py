@@ -43,7 +43,7 @@ for i, r in corp_list.iterrows():
     # 전체재무제표 요청인자
     crtfc_key = crtfc_key
     corp_code = str(r['corp_code']).zfill(8)
-    time.sleep(0.3)  # 기본 대기 시간
+    time.sleep(0.2)  # 기본 대기 시간
 
     url = 'https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json'
     params = {
@@ -89,7 +89,7 @@ for i, r in corp_list.iterrows():
     #    break
     
     #없으면 어느 시점에서 에러발생
-    time.sleep(0.3)
+    time.sleep(0.2)
     
     #print('i = ' + str(i))
     corp_code=str(r['corp_code']).zfill(8)
